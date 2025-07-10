@@ -247,7 +247,7 @@ func (s *MCPServer) sendNotificationCore(
 	default:
 		// Channel is blocked, if there's an error hook, use it
 		if s.hooks != nil && len(s.hooks.OnError) > 0 {
-			method := notification.Notification.Method
+			method := notification.Method
 			err := ErrNotificationChannelBlocked
 			// Copy hooks pointer to local variable to avoid race condition
 			hooks := s.hooks
