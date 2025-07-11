@@ -387,7 +387,7 @@ func (c *StreamableHTTP) handleSSEResponse(ctx context.Context, reader io.ReadCl
 
 		c.readSSE(ctx, reader, func(event, data string) {
 			// (unsupported: batching)
-
+			c.logger.Infof("SSE received event=%s data=%s", event, data)
 			var message JSONRPCResponse
 			if err := json.Unmarshal([]byte(data), &message); err != nil {
 				c.logger.Errorf("failed to unmarshal message: %v", err)

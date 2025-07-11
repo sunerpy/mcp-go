@@ -113,18 +113,29 @@ func (s *MCPServer) buildLogNotification(notification mcp.LoggingMessageNotifica
 }
 
 func (s *MCPServer) SendLogMessageToClient(ctx context.Context, notification mcp.LoggingMessageNotification) error {
+	fmt.Printf("before call tool result: %s\n", notification.Params.Data)
 	session := ClientSessionFromContext(ctx)
+	fmt.Printf("session: %v\n", session)
 	if session == nil || !session.Initialized() {
+		fmt.Printf("session is nil or not initialized\n")
 		return ErrNotificationNotInitialized
 	}
+	fmt.Printf("check session logging: %v\n", session)
 	sessionLogging, ok := session.(SessionWithLogging)
 	if !ok {
+		fmt.Printf("session does not support logging\n")
 		return ErrSessionDoesNotSupportLogging
 	}
+	fmt.Printf("session level check: %v; notification level : %v\n", sessionLogging.GetLogLevel(), notification.Params.Level)
 	if !notification.Params.Level.ShouldSendTo(sessionLogging.GetLogLevel()) {
+		fmt.Printf("notification level is not high enough to send\n")
 		return nil
 	}
-	return s.sendNotificationCore(ctx, session, s.buildLogNotification(notification))
+	err := s.sendNotificationCore(ctx, session, s.buildLogNotification(notification))
+	if err != nil {
+		fmt.Printf("Failed to send notification: %v\n", err)
+	}
+	return err
 }
 
 func (s *MCPServer) sendNotificationToAllClients(notification mcp.JSONRPCNotification) {
@@ -241,8 +252,10 @@ func (s *MCPServer) sendNotificationCore(
 	if sessionWithStreamableHTTPConfig, ok := session.(SessionWithStreamableHTTPConfig); ok {
 		sessionWithStreamableHTTPConfig.UpgradeToSSEWhenReceiveNotification()
 	}
+	fmt.Printf("//todel sendNotificationCore: %v\n", notification)
 	select {
 	case session.NotificationChannel() <- notification:
+		fmt.Printf("//todel sendNotificationCore receive channel cap: %v; lens: %v \n", cap(session.NotificationChannel()), len(session.NotificationChannel()))
 		return nil
 	default:
 		// Channel is blocked, if there's an error hook, use it
