@@ -31,34 +31,33 @@ const (
 )
 
 func NewMCPServer() *server.MCPServer {
-
 	hooks := &server.Hooks{}
 
 	hooks.AddBeforeAny(func(ctx context.Context, id any, method mcp.MCPMethod, message any) {
-		fmt.Printf("beforeAny: %s, %v, %v\n", method, id, message)
+		//fmt.Printf("beforeAny: %s, %v, %v\n", method, id, message)
 	})
 	hooks.AddOnSuccess(func(ctx context.Context, id any, method mcp.MCPMethod, message any, result any) {
-		fmt.Printf("onSuccess: %s, %v, %v, %v\n", method, id, message, result)
+		//fmt.Printf("onSuccess: %s, %v, %v, %v\n", method, id, message, result)
 	})
 	hooks.AddOnError(func(ctx context.Context, id any, method mcp.MCPMethod, message any, err error) {
-		fmt.Printf("onError: %s, %v, %v, %v\n", method, id, message, err)
+		//fmt.Printf("onError: %s, %v, %v, %v\n", method, id, message, err)
 	})
 	hooks.AddBeforeInitialize(func(ctx context.Context, id any, message *mcp.InitializeRequest) {
-		fmt.Printf("beforeInitialize: %v, %v\n", id, message)
+		//fmt.Printf("beforeInitialize: %v, %v\n", id, message)
 	})
 	hooks.AddOnRequestInitialization(func(ctx context.Context, id any, message any) error {
-		fmt.Printf("AddOnRequestInitialization: %v, %v\n", id, message)
+		//fmt.Printf("AddOnRequestInitialization: %v, %v\n", id, message)
 		// authorization verification and other preprocessing tasks are performed.
 		return nil
 	})
 	hooks.AddAfterInitialize(func(ctx context.Context, id any, message *mcp.InitializeRequest, result *mcp.InitializeResult) {
-		fmt.Printf("afterInitialize: %v, %v, %v\n", id, message, result)
+		//fmt.Printf("afterInitialize: %v, %v, %v\n", id, message, result)
 	})
 	hooks.AddAfterCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest, result *mcp.CallToolResult) {
-		fmt.Printf("afterCallTool: %v, %v, %v\n", id, message, result)
+		//fmt.Printf("afterCallTool: %v, %v, %v\n", id, message, result)
 	})
 	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
-		fmt.Printf("beforeCallTool: %v, %v\n", id, message)
+		//fmt.Printf("beforeCallTool: %v, %v\n", id, message)
 	})
 
 	mcpServer := server.NewMCPServer(
@@ -338,6 +337,33 @@ func handleAddTool(
 		return nil, fmt.Errorf("invalid number arguments")
 	}
 	sum := a + b
+	server := server.ServerFromContext(ctx)
+	// progressToken := request.Params.Meta.ProgressToken
+	err := server.SendNotificationToClient(
+		ctx,
+		"notifications/progress",
+		map[string]any{
+			"progress":      a + b,
+			"total":         a + b,
+			// "progressToken": progressToken,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send notification: %w", err)
+	}
+	// go func() {
+	// 	for {
+	// 		time.Sleep(2 * time.Second)
+	// 		//fmt.Printf("sending heartbeat...\n")
+	// 		server.SendNotificationToClient(ctx, "notifications/progress",
+	// 	map[string]any{
+	// 		"progress":      a + b,
+	// 		"total":         a + b,
+	// 		"progressToken": progressToken,
+	// 	},)
+	// 	}
+	// }()
+
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			mcp.TextContent{
@@ -352,7 +378,6 @@ func handleSendNotification(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 ) (*mcp.CallToolResult, error) {
-
 	server := server.ServerFromContext(ctx)
 
 	err := server.SendNotificationToClient(
@@ -484,8 +509,8 @@ func main() {
 	// Only check for "http" since stdio is the default
 	if transport == "http" {
 		httpServer := server.NewStreamableHTTPServer(mcpServer)
-		log.Printf("HTTP server listening on :8080/mcp")
-		if err := httpServer.Start(":8080"); err != nil {
+		log.Printf("HTTP server listening on :6655/mcp")
+		if err := httpServer.Start(":6655"); err != nil {
 			log.Fatalf("Server error: %v", err)
 		}
 	} else {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -193,7 +194,6 @@ func (s *StreamableHTTPServer) Start(addr string) error {
 // Shutdown gracefully stops the server, closing all active sessions
 // and shutting down the HTTP server.
 func (s *StreamableHTTPServer) Shutdown(ctx context.Context) error {
-
 	// shutdown the server if needed (may use as a http.Handler)
 	s.mu.RLock()
 	srv := s.httpServer
@@ -274,12 +274,23 @@ func (s *StreamableHTTPServer) handlePost(w http.ResponseWriter, r *http.Request
 		for {
 			select {
 			case nt := <-session.notificationChannel:
-				func() {
+				var processFlag bool
+				if nt.Method == "notifications/progress" {
+					jsr, _ := json.Marshal(nt)
+					processFlag = true
+					log.Printf("//todel post process Received notification: %v;\nupgradedHeader is %v;\njsr is %v; flag is %v", nt, upgradedHeader, string(jsr), processFlag)
+				} else {
+					jsr, _ := json.Marshal(nt)
+					log.Printf("//todel not progress notification: %v;\nupgradedHeader is %v;\njsr is %v", nt, upgradedHeader, string(jsr))
+				}
+				func(flag bool) {
 					mu.Lock()
 					defer mu.Unlock()
+
 					// if the done chan is closed, as the request is terminated, just return
 					select {
 					case <-done:
+						log.Printf("//todel 293 request is terminated？")
 						return
 					default:
 					}
@@ -297,12 +308,15 @@ func (s *StreamableHTTPServer) handlePost(w http.ResponseWriter, r *http.Request
 						w.Header().Set("Cache-Control", "no-cache")
 						upgradedHeader = true
 					}
+					if flag {
+						log.Printf("//todel 311 now process flag is true, nt: %v", nt)
+					}
 					err := writeSSEEvent(w, nt)
 					if err != nil {
 						s.logger.Errorf("Failed to write SSE event: %v", err)
 						return
 					}
-				}()
+				}(processFlag)
 			case <-done:
 				return
 			case <-ctx.Done():
@@ -323,7 +337,10 @@ func (s *StreamableHTTPServer) handlePost(w http.ResponseWriter, r *http.Request
 	mu.Lock()
 	defer mu.Unlock()
 	// close the done chan before unlock
-	defer close(done)
+	if !session.upgradeToSSE.Load() {
+		defer close(done)
+	}
+	// defer close(done)
 	if ctx.Err() != nil {
 		return
 	}
@@ -394,6 +411,13 @@ func (s *StreamableHTTPServer) handleGet(w http.ResponseWriter, r *http.Request)
 		for {
 			select {
 			case nt := <-session.notificationChannel:
+				if nt.Method == "notifications/progress" {
+					jsr, _ := json.Marshal(nt)
+					log.Printf("//todel 408 post process Received notification: %v;\njsr is %v", nt, string(jsr))
+				} else {
+					jsr, _ := json.Marshal(nt)
+					log.Printf("//todel 411 not progress notification: %v;\njsr is %v", nt, string(jsr))
+				}
 				select {
 				case writeChan <- &nt:
 				case <-done:
@@ -478,12 +502,15 @@ func (s *StreamableHTTPServer) handleDelete(w http.ResponseWriter, r *http.Reque
 func writeSSEEvent(w io.Writer, data any) error {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
+		log.Printf("failed to marshal data: %v", err)
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 	_, err = fmt.Fprintf(w, "event: message\ndata: %s\n\n", jsonData)
 	if err != nil {
+		log.Printf("failed to write SSE event: %v", err)
 		return fmt.Errorf("failed to write SSE event: %w", err)
 	}
+	log.Printf("//todel Writing SSE event: %v", string(jsonData))
 	return nil
 }
 
@@ -614,6 +641,7 @@ func (s *streamableHttpSession) Initialized() bool {
 
 func (s *streamableHttpSession) SetLogLevel(level mcp.LoggingLevel) {
 	s.logLevels.set(s.sessionID, level)
+	log.Printf("Set log level for session %s to %s", s.sessionID, level)
 }
 
 func (s *streamableHttpSession) GetLogLevel() mcp.LoggingLevel {

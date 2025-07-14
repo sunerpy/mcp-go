@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -61,7 +62,7 @@ func (s *MCPServer) HandleMessage(
 		// sent due to WithKeepAlive option)
 		return nil
 	}
-
+	log.Printf("//todel Received message: %s", message)
 	handleErr := s.hooks.onRequestInitialization(ctx, baseMessage.ID, message)
 	if handleErr != nil {
 		return createErrorResponse(
@@ -311,6 +312,7 @@ func (s *MCPServer) HandleMessage(
 		s.hooks.afterCallTool(ctx, baseMessage.ID, &request, result)
 		return createResponse(baseMessage.ID, *result)
 	default:
+		log.Printf("//todel  316 unsupported method: %s", baseMessage.Method)
 		return createErrorResponse(
 			baseMessage.ID,
 			mcp.METHOD_NOT_FOUND,

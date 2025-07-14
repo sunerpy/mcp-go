@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"slices"
 	"sort"
 	"sync"
@@ -1042,11 +1043,14 @@ func (s *MCPServer) handleNotification(
 	notification mcp.JSONRPCNotification,
 ) mcp.JSONRPCMessage {
 	s.notificationHandlersMu.RLock()
+	log.Printf("//todel 1046 list notify handles: %v", s.notificationHandlers)
 	handler, ok := s.notificationHandlers[notification.Method]
 	s.notificationHandlersMu.RUnlock()
 
 	if ok {
 		handler(ctx, notification)
+	} else {
+		log.Printf("//todel 1053 no handler for notification: %v", notification.Method)
 	}
 	return nil
 }

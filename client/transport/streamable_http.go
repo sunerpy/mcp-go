@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -387,7 +388,7 @@ func (c *StreamableHTTP) handleSSEResponse(ctx context.Context, reader io.ReadCl
 
 		c.readSSE(ctx, reader, func(event, data string) {
 			// (unsupported: batching)
-			c.logger.Infof("SSE received event=%s data=%s", event, data)
+			// c.logger.Infof("SSE received event=%s data=%s", event, data)
 			var message JSONRPCResponse
 			if err := json.Unmarshal([]byte(data), &message); err != nil {
 				c.logger.Errorf("failed to unmarshal message: %v", err)
@@ -497,7 +498,7 @@ func (c *StreamableHTTP) SendNotification(ctx context.Context, notification mcp.
 	// Create HTTP request
 	ctx, cancel := c.contextAwareOfClientClose(ctx)
 	defer cancel()
-
+	log.Printf("//todel 501 Sending requestBody notification to %s",string(requestBody))
 	resp, err := c.sendHTTP(ctx, http.MethodPost, bytes.NewReader(requestBody), "application/json, text/event-stream")
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)

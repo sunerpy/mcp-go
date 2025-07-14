@@ -373,6 +373,7 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		for {
 			select {
 			case notification := <-session.notificationChannel:
+				log.Printf("//todel main procee Received notification: %v", notification)
 				eventData, err := json.Marshal(notification)
 				if err == nil {
 					select {

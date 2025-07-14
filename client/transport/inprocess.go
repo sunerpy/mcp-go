@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -54,6 +55,7 @@ func (c *InProcessTransport) SendNotification(ctx context.Context, notification 
 		return fmt.Errorf("failed to marshal notification: %w", err)
 	}
 	notificationBytes = append(notificationBytes, '\n')
+	log.Printf("//todel herer Sending notification: %s", string(notificationBytes))
 	c.server.HandleMessage(ctx, notificationBytes)
 
 	return nil

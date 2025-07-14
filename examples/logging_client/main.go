@@ -15,17 +15,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-type callStats struct {
-	startTime     time.Time
-	progressCount int32
-}
-
 func setupClient(ctx context.Context, onNotify func(mcp.JSONRPCNotification)) *client.Client {
 	serverURL := "http://localhost:6655/mcp"
-	trans, err := transport.NewStreamableHTTP(
-		serverURL,
-		transport.WithContinuousListening(),
-	)
+	trans, err := transport.NewStreamableHTTP(serverURL, transport.WithContinuousListening())
 	if err != nil {
 		log.Fatalf("transport error: %v", err)
 	}
@@ -39,7 +31,7 @@ func setupClient(ctx context.Context, onNotify func(mcp.JSONRPCNotification)) *c
 		Params: mcp.InitializeParams{
 			ProtocolVersion: mcp.LATEST_PROTOCOL_VERSION,
 			ClientInfo: mcp.Implementation{
-				Name:    "logging-client-example",
+				Name:    "add-client",
 				Version: "1.0.0",
 			},
 		},
@@ -48,86 +40,95 @@ func setupClient(ctx context.Context, onNotify func(mcp.JSONRPCNotification)) *c
 		log.Fatalf("initialize error: %v", err)
 	}
 
-	setReq := mcp.SetLevelRequest{
-		Params: mcp.SetLevelParams{Level: mcp.LoggingLevelDebug},
-	}
-	if err := c.SetLevel(ctx, setReq); err != nil {
-		log.Fatalf("set level error: %v", err)
-	}
 	return c
 }
 
+type callStats struct {
+	startTime     time.Time
+	progressCount int32
+}
+
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	var totalCalls int32
+	var wg sync.WaitGroup
 	var globalProgress int32
 	var globalMessages int32
-	var wg sync.WaitGroup
-	callTrack := sync.Map{}
-	var counter int32
-	generateID := func() string {
-		return fmt.Sprintf("call-%d", atomic.AddInt32(&counter, 1))
-	}
-
+	// callTrack := sync.Map{}
 	onNotify := func(n mcp.JSONRPCNotification) {
+		log.Printf("Got %s: %v", n.Method, n.Params)
+		return
 		switch n.Method {
 		case "notifications/progress":
+			token := n.Params.AdditionalFields["progressToken"]
+			callID := n.Params.AdditionalFields["call_id"]
 			atomic.AddInt32(&globalProgress, 1)
-			if cid, ok := n.Params.AdditionalFields["call_id"].(string); ok {
-				if v, exists := callTrack.Load(cid); exists {
-					stats := v.(*callStats)
-					atomic.AddInt32(&stats.progressCount, 1)
-				}
-			}
+			log.Printf("Progress received: token=%v, call_id=%v, detail=%v", token, callID, n.Params)
+
 		case "notifications/message":
-			atomic.AddInt32(&globalMessages, 1)
+			callID := ""
 			if data, ok := n.Params.AdditionalFields["data"].(map[string]any); ok {
-				if cid, ok := data["call_id"].(string); ok {
-					if v, exists := callTrack.LoadAndDelete(cid); exists {
-						stats := v.(*callStats)
-						log.Printf("Call %s completed (%d progress updates) in %v", cid, stats.progressCount, time.Since(stats.startTime))
-					}
-				}
+				callID, _ = data["call_id"].(string)
 			}
+			log.Printf("Message received for call_id=%s: %v", callID, n.Params)
+
 		default:
-			log.Printf("Notification %s -> %v", n.Method, n.Params)
+			log.Printf("Other notification: %s -> %v", n.Method, n.Params)
 		}
 	}
 
 	c := setupClient(ctx, onNotify)
 	defer c.Close()
-
+	setReq := mcp.SetLevelRequest{
+		Params: mcp.SetLevelParams{
+			Level: mcp.LoggingLevelDebug,
+		},
+	}
+	c.SetLevel(ctx, setReq)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
+	log.Println("Starting periodic 'add' tool calls")
 	for {
 		select {
 		case <-ticker.C:
-			cid := generateID()
-			callTrack.Store(cid, &callStats{startTime: time.Now()})
 			wg.Add(1)
-			go func(id string) {
+			go func() {
 				defer wg.Done()
+				a, b := rand.Intn(100), rand.Intn(100)
+				progressToken := fmt.Sprintf("token-%d", time.Now().UnixNano())
+				callID := fmt.Sprintf("call-%d", rand.Int())
 				req := mcp.CallToolRequest{
 					Params: mcp.CallToolParams{
-						Name: "add_numbers",
+						Name: "add",
 						Arguments: map[string]any{
-							"a":       rand.Intn(100),
-							"b":       rand.Intn(100),
-							"call_id": id,
+							"a": a,
+							"b": b,
+						},
+						Meta: &mcp.Meta{
+							ProgressToken: progressToken,
+							AdditionalFields: map[string]any{
+								"call_id": callID,
+							},
 						},
 					},
 				}
-				if _, err := c.CallTool(ctx, req); err != nil && !errors.Is(err, context.Canceled) {
-					log.Printf("tool call error: %v", err)
-					callTrack.Delete(id)
+				res, err := c.CallTool(ctx, req)
+				if err != nil && !errors.Is(err, context.Canceled) {
+					log.Printf("add tool error: %v", err)
+					return
 				}
-			}(cid)
+				atomic.AddInt32(&totalCalls, 1)
+				if len(res.Content) > 0 {
+					// log.Printf("[Add Result] a=%d, b=%d → %v", a, b, res.Content[0])
+				}
+			}()
 		case <-ctx.Done():
 			wg.Wait()
-			log.Printf("Total progress notifications: %d", atomic.LoadInt32(&globalProgress))
-			log.Printf("Total final messages: %d", atomic.LoadInt32(&globalMessages))
+			log.Printf("Total add tool calls: %d", atomic.LoadInt32(&totalCalls))
+			log.Printf("Done.msg: %d; process: %d;", atomic.LoadInt32(&globalMessages), atomic.LoadInt32(&globalProgress))
 			return
 		}
 	}
