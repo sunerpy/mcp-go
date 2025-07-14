@@ -336,11 +336,8 @@ func (s *StreamableHTTPServer) handlePost(w http.ResponseWriter, r *http.Request
 	// Write response
 	mu.Lock()
 	defer mu.Unlock()
-	// close the done chan before unlock
-	if !session.upgradeToSSE.Load() {
-		defer close(done)
-	}
-	// defer close(done)
+	// ensure the notification goroutine stops once the response has been sent
+	defer close(done)
 	if ctx.Err() != nil {
 		return
 	}
